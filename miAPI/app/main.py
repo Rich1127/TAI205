@@ -1,4 +1,4 @@
-
+            
 #1. Importaciones
 from operator import index
 

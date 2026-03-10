@@ -1,0 +1,17 @@
+1.-Construir una API para gestionar reservas de hotel que permite:
+-Crear reserva
+-Listar reservas
+-Consultar por ID
+-Confirmar reserva
+-Cancelar reserva
+
+2.-Modelo de datos obligatorios:
+-Huesped minimo 5 caracteres
+-Fecha entrada no menor a fecha actual
+-Tipo habitacion: sencilla, doble o suite
+
+3.- Endpoints protegidos con usuario: hotel y contraseña: r2026
+-Crear reserva
+-Cancelar reserva
+
+4.- Prepara y prueba todos los endpoints en Postman para su rapida revision, no es valido entregar cualquier otra herramienta
