@@ -15,3 +15,7 @@
 -Cancelar reserva
 
 4.- Prepara y prueba todos los endpoints en Postman para su rapida revision, no es valido entregar cualquier otra herramienta
+
+Ejemplo de como buscar
+http://localhost:8000/v1/libros/
+http://localhost:8000/v1/prestamos/La cenicienta

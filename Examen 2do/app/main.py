@@ -16,9 +16,9 @@ app= FastAPI(
 
 #BD ficticia
 reservas=[
-    {"id":1, "huesped":"Jesus", "fecha_entrada":"2026-03-01", "tipo_habitacion":"simple"},
-    {"id":2, "huesped":"Osiel", "fecha_entrada":"2026-05-02", "tipo_habitacion":"doble"},
-    {"id":3, "huesped":"Yisus", "fecha_entrada":"2026-14-03", "tipo_habitacion":"suite"},
+    {"id":1, "huesped":"Jesus", "fecha_entrada":"2026-03-01", "tipo_habitacion":"simple", "checkin":"pendiente"},
+    {"id":2, "huesped":"Osiel", "fecha_entrada":"2026-05-02", "tipo_habitacion":"doble", "checkin":"pendiente"},
+    {"id":3, "huesped":"Yisus", "fecha_entrada":"2026-14-03", "tipo_habitacion":"suite", "checkin":"pendiente"},
 ]
 
 #Modelo de validacion añade que las validaciones de que la fecha de entrada no pueden ser menores a la fecha actual,
@@ -47,10 +47,12 @@ def verificar_peticion(credenciales: HTTPBasicCredentials = Depends(seguridad)):
     return credenciales.username
 
 #Endpoints
+#Mensaje de inicio
 @app.get("/", tags=['Inicio'])
 async def reserva_hotel():
     return {"mensaje":"API de reservas de hotel"}
 
+#Crear reserva
 @app.post("/v1/reservas/{id}", tags=['CRUD HTTP'])
 async def crear_reserva(id: int,userAuth: str = Depends(verificar_peticion)):
     for index, res in enumerate(reservas):
@@ -66,10 +68,12 @@ async def crear_reserva(id: int,userAuth: str = Depends(verificar_peticion)):
         "reserva":{"id": id, "huesped": "", "fecha_entrada": "", "tipo_habitacion": "", "fecha_salida": 0, "estancia": 0}
     }
 
+#Listar reservas
 @app.get("/v1/reservas/", tags=['CRUD HTTP'])
 async def listar_reservas():
     return reservas
 
+#Consultar reserva
 @app.get("/v1/reservas/{id}", tags=['Parametro opcional'])
 async def consultar_reserva(id:int):
     await asyncio.sleep(2)
@@ -78,14 +82,16 @@ async def consultar_reserva(id:int):
             return {"Reserva encontrada":id,"Datos":reserva}
     return {"Resultado":"Reserva encontrada"}
 
+#Confirmar reserva
 @app.put("/v1/reservas/{id}/confirmar", tags=['Parametro opcional'])
 async def confirmar_reserva(id:int):
     for reserva in reservas:
         if reserva["id"]==id:
-            reserva["estado"]="confirmada"
-            return {"Reserva confirmada":id}
+            reserva["estado"]="check-in realizado"
+            return {"Check-in realizado con exito", f"El id de la reserva es {id}"}
     return {"Resultado":"Reserva no encontrada"}
 
+#Eliminar reserva
 @app.delete("/v1/reservas/{id}/eliminar", tags=['Parametro opcional'])
 async def cancelar_reserva(id:int,userAuth: str = Depends(verificar_peticion)):
     for index, reserva in enumerate(reservas):
