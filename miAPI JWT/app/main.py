@@ -6,7 +6,10 @@ from fastapi import FastAPI,status,HTTPException,Depends
 from typing import Optional
 import asyncio
 from pydantic import BaseModel, Field
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+import bcrypt
+from datetime import datetime, timedelta
 import secrets
 
 #2. Inicializacion APP
@@ -16,11 +19,18 @@ app= FastAPI(
     version="1.0.0"
     )
 
+# Configuraciones OAuth2 + JWT
+SECRET_KEY = "your-secret-key-here"  # En producción, usar una clave segura
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 #BD ficticia
 usuarios=[
-    {"id":1, "nombre":"Jesus", "edad":20},
-    {"id":2, "nombre":"Osiel", "edad":23},
-    {"id":3, "nombre":"Yisus", "edad":22},
+    {"id":1, "nombre":"Jesus", "edad":20, "username": "jesus", "hashed_password": bcrypt.hashpw("123456".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')},
+    {"id":2, "nombre":"Osiel", "edad":23, "username": "osiel", "hashed_password": bcrypt.hashpw("password2".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')},
+    {"id":3, "nombre":"Yisus", "edad":22, "username": "yisus", "hashed_password": bcrypt.hashpw("password3".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')},
 ]
 
 #Modelo de validacion pydantic
@@ -29,21 +39,74 @@ class crear_usuario(BaseModel):
     nombre:str = Field(..., min_length=3, max_length=50, description="Juanita")
     edad:int = Field(..., ge=1, le=123, description="Edad valida entre 1 y 123")
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
-#Seguridad HTTP BASIC
+class TokenData(BaseModel):
+    username: Optional[str] = None
 
-seguridad = HTTPBasic()
+# Funciones de autenticación
+def verify_password(plain_password, hashed_password):
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-def verificar_peticion(credenciales: HTTPBasicCredentials = Depends(seguridad)):
-    userAuth = secrets.compare_digest(credenciales.username, "Jesus")
-    passAuth = secrets.compare_digest(credenciales.password, "123456")
-    
-    if not (userAuth and passAuth):
+def get_user(username: str):
+    for user in usuarios:
+        if user["username"] == username:
+            return user
+    return None
+
+def authenticate_user(username: str, password: str):
+    user = get_user(username)
+    if not user:
+        return False
+    if not verify_password(password, user["hashed_password"]):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    user = get_user(username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+@app.post("/token", response_model=Token, tags=['Autenticación'])
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales no autorizadas"
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    return credenciales.username
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
 #3. Endpoints
 @app.get("/", tags=['Inicio'])
@@ -103,7 +166,7 @@ async def crear_usuario(usuario:crear_usuario):
     }
     
 @app.put("/v1/usuarios/{id}", tags=['CRUD HTTP'])
-async def actualizar_usuario(id: int, usuario_actualizado: dict):
+async def actualizar_usuario(id: int, usuario_actualizado: dict, current_user: dict = Depends(get_current_user)):
     for usr in usuarios:
         if usr["id"] == id:
             usr["nombre"] = usuario_actualizado.get("nombre", usr["nombre"])
@@ -118,13 +181,13 @@ async def actualizar_usuario(id: int, usuario_actualizado: dict):
     raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
 @app.delete("/v1/usuarios/{id}", tags=['CRUD HTTP'])
-async def eliminar_usuario(id: int,userAuth: str = Depends(verificar_peticion)):
+async def eliminar_usuario(id: int, current_user: dict = Depends(get_current_user)):
     for index, usr in enumerate(usuarios):
         if usr["id"] == id:
             index = usuarios.index(usr)
             usuarios.pop(index)
             return {
-                "mensaje": f"Usuario eliminado por {userAuth}",
+                "mensaje": f"Usuario eliminado por {current_user['username']}",
                 "status": "200",
                 "usuario_eliminado": usr
             }
